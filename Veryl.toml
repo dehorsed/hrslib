@@ -6,6 +6,3 @@ version = "0.1.0"
 sources = ["rtl"]
 exclude_std = true
 target = {type = "directory", path = "target"}
-
-[synth]
-top = "async_fifo"
