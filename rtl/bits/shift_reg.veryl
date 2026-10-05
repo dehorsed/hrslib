@@ -1,0 +1,26 @@
+module shift_reg #(
+    param WIDTH: p32 = 1,
+    param DEPTH: p32 = 2,
+) (
+    clk_i : input  clock       ,
+    rst_i : input  reset       ,
+    data_i: input  logic<WIDTH>,
+    data_o: output logic<WIDTH>,
+) {
+    var shift_reg: logic<WIDTH> [DEPTH];
+
+    always_ff {
+        if_reset {
+            for i in 0..DEPTH {
+                shift_reg[i] = '0;
+            }
+        } else {
+            shift_reg[0] = data_i;
+            for i in 1..DEPTH {
+                shift_reg[i] = shift_reg[i - 1];
+            }
+        }
+    }
+
+    assign data_o = shift_reg[DEPTH - 1];
+}

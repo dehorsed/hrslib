@@ -1,0 +1,10 @@
+module bit_rev #(
+    param W: u32 = 8,
+) (
+    data_i: input  logic<W>,
+    data_o: output logic<W>,
+) {
+    for i in 0..W :g_bit_rev {
+        assign data_o[i] = data_i[W - 1 - i];
+    }
+}

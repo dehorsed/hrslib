@@ -1,0 +1,102 @@
+module async_fifo #(
+    param DATA_WIDTH: p32 = 8    ,
+    param ADDR_WIDTH: p32 = 4    ,
+    param FWFT_MODE : bit = false,
+    param CDC_STAGES: p32 = 2    ,
+) (
+    wr_clk_i : input  'w clock            ,
+    wr_rst_i : input  'w reset            ,
+    wr_en_i  : input  'w logic            ,
+    wr_data_i: input  'w logic<DATA_WIDTH>,
+    wr_full_o: output 'w logic            ,
+
+    rd_clk_i  : input  'r clock            ,
+    rd_rst_i  : input  'r reset            ,
+    rd_en_i   : input  'r logic            ,
+    rd_data_o : output 'r logic<DATA_WIDTH>,
+    rd_empty_o: output 'r logic            ,
+) {
+    const PTR_WIDTH: u32 = ADDR_WIDTH + 1;
+    const MEM_DEPTH: u32 = 1 << ADDR_WIDTH;
+
+    function bin2gray (
+        bin: input logic<PTR_WIDTH>,
+    ) -> logic<PTR_WIDTH> {
+        return (bin >> 1) ^ bin;
+    }
+
+    var wr_ptr_bin : 'w logic<PTR_WIDTH>;
+    var wr_ptr_gray: 'w logic<PTR_WIDTH>;
+
+    var rd_ptr_bin : 'r logic<PTR_WIDTH>;
+    var rd_ptr_gray: 'r logic<PTR_WIDTH>;
+
+    var rd_ptr_gray_sync: 'w logic<PTR_WIDTH>;
+    var wr_ptr_gray_sync: 'r logic<PTR_WIDTH>;
+
+    var mem: 'w logic<DATA_WIDTH> [MEM_DEPTH];
+
+    assign wr_full_o  = (wr_ptr_gray
+        == {~rd_ptr_gray_sync[ADDR_WIDTH:ADDR_WIDTH - 1], rd_ptr_gray_sync[ADDR_WIDTH - 2:0]});
+    assign rd_empty_o = (rd_ptr_gray == wr_ptr_gray_sync);
+
+    always_ff (wr_clk_i, wr_rst_i) {
+        if_reset {
+            wr_ptr_bin  = '0;
+            wr_ptr_gray = '0;
+        } else if wr_en_i && !wr_full_o {
+            wr_ptr_bin  = wr_ptr_bin + 1'b1;
+            wr_ptr_gray = bin2gray(wr_ptr_bin + 1'b1);
+        }
+    }
+
+    always_ff (rd_clk_i, rd_rst_i) {
+        if_reset {
+            rd_ptr_bin  = '0;
+            rd_ptr_gray = '0;
+        } else if rd_en_i && !rd_empty_o {
+            rd_ptr_bin  = rd_ptr_bin + 1'b1;
+            rd_ptr_gray = bin2gray(rd_ptr_bin + 1'b1);
+        }
+    }
+
+    inst u_wr_ptr_sync: cdc_sync #(
+        WIDTH : PTR_WIDTH ,
+        STAGES: CDC_STAGES,
+    ) (
+        dest_clk_i : rd_clk_i        ,
+        dest_rst_i : rd_rst_i        ,
+        src_data_i : wr_ptr_gray     ,
+        dest_data_o: wr_ptr_gray_sync,
+    );
+
+    inst u_rd_ptr_sync: cdc_sync #(
+        WIDTH : PTR_WIDTH ,
+        STAGES: CDC_STAGES,
+    ) (
+        dest_clk_i : wr_clk_i        ,
+        dest_rst_i : wr_rst_i        ,
+        src_data_i : rd_ptr_gray     ,
+        dest_data_o: rd_ptr_gray_sync,
+    );
+
+    always_ff (wr_clk_i) {
+        if wr_en_i && !wr_full_o {
+            mem[wr_ptr_bin[ADDR_WIDTH - 1:0]] = wr_data_i;
+        }
+    }
+
+    unsafe (cdc) {
+        if FWFT_MODE :g_fwft {
+            assign rd_data_o = mem[rd_ptr_bin[ADDR_WIDTH - 1:0]];
+        } else :g_std {
+            always_ff (rd_clk_i, rd_rst_i) {
+                if_reset {
+                    rd_data_o = '0;
+                } else if rd_en_i && !rd_empty_o {
+                    rd_data_o = mem[rd_ptr_bin[ADDR_WIDTH - 1:0]];
+                }
+            }
+        }
+    }
+}
