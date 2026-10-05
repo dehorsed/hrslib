@@ -8,22 +8,22 @@ module cdc_sync #(
     dest_data_o: output 'd logic<WIDTH>,
 ) {
     #[sv("ASYNC_REG = \"TRUE\"")]
-    var sync_ffs: logic<WIDTH> [STAGES];
+    var sync_chain: logic<WIDTH> [STAGES];
 
     unsafe (cdc) {
         always_ff {
             if_reset {
                 for i in 0..STAGES {
-                    sync_ffs[i] = '0;
+                    sync_chain[i] = '0;
                 }
             } else {
-                sync_ffs[0] = src_data_i;
+                sync_chain[0] = src_data_i;
                 for i in 1..STAGES {
-                    sync_ffs[i] = sync_ffs[i - 1];
+                    sync_chain[i] = sync_chain[i - 1];
                 }
             }
         }
     }
 
-    assign dest_data_o = sync_ffs[STAGES - 1];
+    assign dest_data_o = sync_chain[STAGES - 1];
 }
